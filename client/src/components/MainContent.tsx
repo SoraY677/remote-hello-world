@@ -1,11 +1,17 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nowInSec, SkyWayAuthToken, uuidV4 } from "@skyway-sdk/token";
 import {
   LocalAudioStream,
+  LocalP2PRoomMember,
+  LocalStream,
   LocalVideoStream,
+  RoomPublication,
+  SkyWayContext,
+  SkyWayRoom,
   SkyWayStreamFactory,
 } from "@skyway-sdk/room";
+import RemoteMedia from "./RemoteMedia";
 
 const MainContent = () => {
   const appId = useMemo(() => process.env.NEXT_PUBLIC_SKYWAY_APP_ID, []);
@@ -83,16 +89,73 @@ const MainContent = () => {
     initialize();
   }, [token, localVideo]);
 
+  // ルーム名
+  const [roomName, setRoomName] = useState("");
+  // 自分自身の参加者情報
+  const [me, setMe] = useState<LocalP2PRoomMember>();
+
+  const canJoin = useMemo(() => {
+    return roomName !== "" && localStream != null && me == null;
+  }, [roomName, localStream, me]);
+
+  const onJoinClick = useCallback(async () => {
+    // canJoinまでにチェックされるので普通は起きない
+    // assertionメソッドにしてもいい
+    if (localStream == null || token == null) return;
+
+    const context = await SkyWayContext.Create(token);
+
+    // ルームを取得、または新規作成
+    const room = await SkyWayRoom.FindOrCreate(context, {
+      type: "p2p",
+      name: roomName,
+    });
+
+    const me = await room.join();
+    setMe(me);
+
+    // 映像と音声を配信
+    await me.publish(localStream.video);
+    await me.publish(localStream.audio);
+
+    // 自分以外の参加者情報を取得
+    setOtherUserPublications(
+      room.publications.filter((p) => p.publisher.id !== me.id)
+    );
+
+    // その後に参加してきた人の情報を取得
+    room.onStreamPublished.add((e) => {
+      if (e.publication.publisher.id !== me.id) {
+        setOtherUserPublications((pre) => [...pre, e.publication]);
+      }
+    });
+  }, [roomName, token, localStream]);
+
+  const [otherUserPublications, setOtherUserPublications] = useState<
+    RoomPublication<LocalStream>[]
+  >([]);
+
   return (
     <div>
       <p>ID: </p>
       <div>
-        room name:
-        <input type="text" />
-        <button>join</button>
+        room name:{" "}
+        <input
+          type="text"
+          value={roomName}
+          onChange={(e) => setRoomName(e.target.value)}
+        />
+        <button onClick={onJoinClick} disabled={!canJoin}>
+          join
+        </button>
       </div>
       <video ref={localVideo} width="400px" muted playsInline></video>
-      <div>{/* TODO ここに他の人のメディア */}</div>
+      <div>
+        {me != null &&
+          otherUserPublications.map((p) => (
+            <RemoteMedia key={p.id} me={me} publication={p} />
+          ))}
+      </div>
     </div>
   );
 };
