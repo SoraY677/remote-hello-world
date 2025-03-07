@@ -1,0 +1,14 @@
+{
+  "name": "remote-hello-world",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "yarn --cwd client dev",
+    "dev:client-app": "yarn --cwd client dev:next",
+    "build": "yarn build:client",
+    "build:client": "yarn --cwd client build"
+  },
+  "repository": "git@github.com:SoraY677/remote-hello-world.git",
+  "author": "soray677 <soray677@outlook.com>",
+  "license": "MIT"
+}
